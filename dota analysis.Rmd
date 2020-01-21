@@ -1,0 +1,643 @@
+---
+title: "Exploratory Data Analysis on Dota 2 matches"
+output: html_notebook
+---
+
+### Introduction
+Dota 2 is a popular online multiplayer team strategy game released in 2013 by Valve. Each match consists of ten players, randomly assigned into Dire or Radiant team with five players on each team. The objective is to destroy the opposing side's base while defending our own. The purpose of this analysis is to explore the relationship between variables and examine the trends of my match history.
+
+### Dataset
+All data used in this analysis are collected from the open source platform, [OpenDota](https://www.opendota.com/). The dataset consists of all the matches that I've ever played between 2012 - 2019. Each row represents information of each match and each column represents different feature of a match.
+
+```{r echo=FALSE}
+library(devtools)
+install_github("nxskok/smmr")
+```
+
+### Cleaning Dataset
+```{r echo=FALSE, warning=FALSE}
+# Load libarires
+library(tidyverse)
+library(lubridate)
+library(corrplot)
+library(ggpubr)
+library(smmr)
+```
+
+First, I convert the start time into year, day of the week and hour for better reading of the timestamp.
+```{r warning=FALSE}
+# Load data
+data <- read.csv("player_matches.csv")
+
+# Convert start time into year, day of the week and hour
+# Create bin for year, week and hour
+year = c()
+hour  = c()
+week = c()
+# Timestamp vector
+timestamp = data[,5]
+# Get year from timestamp, convert to year and append to data
+for (value in timestamp) {
+  converted_date = (as.POSIXct(value, origin="1970-01-01"))
+  year_str = substr(as.Date(converted_date), start = 1, stop = 4)
+  year_int = strtoi(year_str, base = 0L)
+  year <- append(year, year_int)
+  hour_int = (hour(converted_date))
+  hour <- append(hour, hour_int)
+  week_str = weekdays(as.Date(converted_date))
+  week <- append(week, week_str)
+}
+# Append modified columns into dataset and remove the old column
+df <- data.frame(year = year)
+df2 <- data.frame(hour=hour)
+df3 <- data.frame(week=week)
+data <- cbind(data,df, df2, df3)
+data <- subset(data, select = -c(start_time,hero_id,id))
+# Convert duration to minutes
+data$duration <- data$duration/60
+```
+
+Next, I add a new column into the dataframe representing the K/D/A ratio 
+```{r}
+# Calculate kda using existing columns of kills, deaths and assists using the formula (kills + assists) / deathes
+kills_col <- data$kills
+deaths_col <- c()
+# Add 1 to death values of 0 because we cannot divide by 0
+for (value in data$deaths) {
+  if (value == 0) {
+    deaths_col <- append(deaths_col, value +1)
+  }
+  else 
+    deaths_col <- append(deaths_col, value)
+}
+assists_col <- data$assists
+kda <- (kills_col+assists_col)/(deaths_col)
+# Round every value in this column to 3 decimal places
+kda <- round(kda,3)
+# add new column kda into dataframe
+data <- cbind(data,kda)
+# Reorder column for better reading
+data <- data[c(1,2,3,10,11,12,4,5,6,13,7,8,9)]
+```
+
+Finally, I want to replace the is_radiant column with a team column representing which side was I placed in each match
+```{r}
+# Create bin for team entries
+team_col = c()
+# convert values in vector to string, with 0 representing dire and 1 representing radiant
+for (value in data$is_radiant) {
+  if (value == 0)
+    team_col <- append(team_col, "dire")
+  else
+    team_col <- append(team_col, "radiant")
+}
+df3 <- data.frame(team_col=team_col)
+# Drop is_radiant column and replace by team_col
+data <- subset(data, select=-c(is_radiant))
+data <- cbind(data,df3)
+```
+
+```{r}
+#output total number of matches played
+nrow(data)
+```
+This dataset consists of 2191 rows, i.e there are 2191 games played in total.    
+
+```{r}
+# Displaying first 6 rows of the dataset
+head(data)
+```
+The first 6 rows of the dataset are shown above.    
+
+**Description of each column :**   
+
+**match_id** : a unique numeric identification of a specific match   
+**radiant_win** : did the radiant team win. 0 represents no, 1 represents yes   
+**duration** : the duration of the match in minutes  
+**year** : the year of which the match was played   
+**hour** : the hour of the day which the match was played   
+**week** : day of the week which the matched was played   
+**kills** : the number of times I eliminated another player from the opposing team   
+**deaths** : the number of times I got eliminated by another player from the opposing team   
+**assists** : the number of times I helped a teammate to eliminate another player from the opposing team   
+**kda** : a measure of perforamce in a match, calculated as the (kills + assists)/deaths ratio   
+**win** : did I win the match. 0 represents no, 1 represents yes   
+**hero_name** : the name of the in game character used in the match   
+**team_col** : the team that I was on   
+
+### Looking at the activity between 2012 and 2019
+
+### How many games won and lost
+```{r warning=FALSE}
+# Vector of win and lose entries
+win_lose = data$win
+# create bin for win/lose entries
+match_result = c()
+# Convert values in vector to string, with 0 representing loses and 1 representing wins
+for (value in win_lose) {
+  if (value == 0)
+    match_result <- append(match_result, "lose")
+  else
+    match_result <- append(match_result, "win")
+}
+df2 <- data.frame(match_result=match_result)
+subdata <- cbind(data,df2)
+
+# Create bar graph comparing the number of matches won and lost
+ggplot(subdata, aes(x=match_result)) +
+  labs(x = "match result", y="play count")+
+  geom_bar(stat="count", fill="steelblue") +
+  ggtitle("Total games won vs lost") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(aes(label=..count..), color="white", position=position_stack(vjust = .5), size=5, stat='count')
+
+```
+
+
+```{r}
+# Find total and fraction of winning matches
+data %>%
+  dplyr::summarise(
+    total = n(),
+    percent_won = mean(win == 1)
+    )
+```
+Overall, I have won more than I have lost, with a winrate of 0.5162 or 51.62%.   
+
+### lifetime winrate trend
+```{r}
+data2 <- read.csv("player_matches.csv")
+date = c()
+# Timestamp vector
+timestamp = data2[,5]
+# Get year from timestamp, convert to year and append to data
+for (value in timestamp) {
+  converted_date = (as.POSIXct(value, origin="1970-01-01"))
+  
+  date <- append(date, as.Date(converted_date))
+}
+data2 <- cbind(data2, date)
+data2 <- subset(data2, select= c(date, win))
+data2 <- data2[with(data2, order(date)),]
+total_games = 1
+num_wins = 0
+winrate = c()
+for (result in data2$win) {
+  num_wins = num_wins + result
+  current_winrate = num_wins/total_games
+  winrate <- append(winrate, current_winrate)
+  total_games = total_games + 1
+}
+data2 <- cbind(data2, winrate)
+ggplot(data=data2, aes(x=date, y=winrate, color="life time winrate")) +
+  geom_line() +
+  geom_line(aes(y=0.5, color="50% winrate"), linetype="dashed", size=0.1) +
+  labs(x="timeline", y="winrate", title="Lifetime winrate") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_colour_manual(name="Legend",
+    values=c(`life time winrate`="black", `50% winrate`="red"))
+```
+The winrate was usually very close to 50% with intervals that were slightly above or below 50%.   
+
+```{r}
+# Create bar graph comparing the number of matches played from 2012 to 2019
+count_year <- ggplot(subdata, aes(factor(year))) +
+  geom_bar(stat="count", fill="steelblue") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  labs(x = "year", y="play count", title="Play count by year") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+# create column consisting of the match results
+result_col <- factor(subdata$match_result)
+
+count_year
+```
+Since the matches of 2012 happened during the last few days of the year, there are very few number of games played during the year of 2012 and that explains why the bar for 2012 is very low. Activity spiked was highest between the 2013-2015 and 2018-2019 intervals, although we also observe that there is a steady decline in count throughout the years.    
+
+```{r}
+# Summarize winning matches by year
+wl_year <- data %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(
+    total = n(),percent_won = mean(win == 1))
+
+
+ggplot(wl_year, aes(x=factor(year), y=percent_won)) +
+  geom_point() +
+  geom_line(group = 1) +
+  ylim(0,1) +
+  labs(x="year", y="winrate", title="Winrate by year") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The years 2012, 2016 and 2017 has considerably lower winrate on the graph compare to other years. This might be the result of lack of data or simply decline in game mechanics for not playing frequently. The linear increase in winrate between 2017-2019 will be discussed later on.   
+
+### Activity by hour of the day   
+
+```{r}
+# Create bar graph comparing the number of matches played by the hour of the day
+count_hour <- ggplot(subdata, aes(factor(hour))) +
+  geom_bar(stat="count", fill="steelblue") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  labs(x="hour of the day", y="play count", title="play counts by hour of the day") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+count_hour
+```
+The vast majority of gameplay happened between 2pm to midnight. This was expected since the period of time between the afternoon up until midnight is usually when most people are awake and active.   
+Between 2am to 9am has the lowest play counts, which makes sense since during that period of time usually most people are asleep.
+
+```{r}
+# Summarize winning matches by hour of the day
+wl_year <- data %>%
+  dplyr::group_by(hour) %>%
+  dplyr::summarise(
+    total = n(),percent_won = mean(win == 1))
+
+
+ggplot(wl_year, aes(x=factor(hour), y=percent_won)) +
+  geom_point() +
+  geom_line(group = 1) +
+  ylim(0,1) +
+  labs(x="hour of the day", y="percent won", title="Winrate by hour") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The winrate by the hour seems to fluctuate between 30% and 60%. An interesting note is that both the upper peaks and lower peaks occurs in the morning.   
+
+### Activity by day of the week
+
+```{r}
+subdata$week <- factor(subdata$week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+count_week <- ggplot(subdata, aes(factor(week))) +
+  geom_bar(stat="count", fill="steelblue") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  labs(x = "day of the week", y="play count", title = "play count by day of the week") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+count_week
+```
+From the bar graph, we see that there is a steady increase in play counts throughout the weekdays. The weekends had noticably more games played compared to the weekdays. This can be explained by the fact that there were probably a lot more work assigned on the starting day of the week from school and towards the end of the week there are more free time to spare.
+
+```{r}
+# Summarize winning matches by week
+wl_week <- data %>%
+  dplyr::group_by(week) %>%
+  dplyr::summarise(
+    total = n(),percent_won = mean(win == 1))
+
+ggplot(wl_week, aes(x=factor(week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")), y=percent_won)) +
+  geom_point() +
+  geom_line(group = 1) +
+  ylim(0,1) +
+  labs(x="week", y="winrate", title="Winrate by day of the week") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Overall, there does not seem to be any major difference in winrate throughout the week. Althought an interesting note is that Friday is the only day where the winrate is dropped below 50%.  
+
+   
+In general, there seems to be an improvement in winrate throughout the years, with the highest winrate being in the year of 2019. For further investigation, I will look at the the winrate difference between when I first started playing compared to the most recent matches in terms of hours and days of the week. Since the matches of 2012 happened during the last few days of the year, there are very few number of games played during the year of 2012, so I decided to compare the data between 2013 and 2019.
+```{r}
+# Create filtered version of only data from the year of 2013
+wl_2013 <- data %>%
+  dplyr::filter(year == 2013) %>%
+  dplyr::group_by(hour) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+# filtering hours without any matches
+wl_2013_2 = wl_2013 %>%
+  filter(hour <= 2)
+
+wl_2013_7 = wl_2013 %>%
+  filter(hour >= 7)
+
+# Create filtered version of only data from the year of 2019
+wl_2019 <- data %>%
+  dplyr::filter(year == 2019) %>%
+  dplyr::group_by(hour) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+# Create line graph comparing the winrate by hour of the day of the year 2013 and 2019
+ggplot() +
+  geom_line(data=wl_2019, group = 1, aes(x=factor(hour), y=percent_won, color = "#3282b8")) +
+  geom_line(data=wl_2013_2, group = 1, aes(x=factor(hour), y=percent_won, color = "#e32249")) +
+  geom_line(data=wl_2013_7, group = 1, aes(x=factor(hour), y=percent_won, color = "#e32249")) +
+  ylim(0,1) +
+  labs(x="hour of the day", y="percent won", title="Winrate by hour of the day 2013 vs 2019") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position="right")+
+  scale_color_discrete(name = "year", labels = c("2019", "2013"))
+```
+Comparing the years of 2013 and 2019 with the winrate by hour of the day, for the most part there is an obvious improvement in the year or 2019 for example in the time frame between 0 to 7 and also between 12 to 22. On the other hand there seem to be a decline in winrate during the time interval of 8 to 10 and 22 to 0. There is a gap between 2am-7am for the year of 2013 because of the lack of data during those hours.  
+
+```{r}
+# Create filtered version of only data from the year of 2013
+wl_2013 <- data %>%
+  dplyr::filter(year == 2013) %>%
+  dplyr::group_by(week) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+# Create filtered version of only data from the year of 2019
+wl_2019 <- data %>%
+  dplyr::filter(year == 2019) %>%
+  dplyr::group_by(week) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+wl_2013$week <- factor(wl_2013$week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+wl_2019$week <- factor(wl_2019$week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+# Create line graph comparing the winrate by day of the week of the year 2013 and 2019
+ggplot() +
+  geom_line(data=wl_2019, group = 1, aes(x=factor(week), y=percent_won, color = "#3282b8")) +
+  geom_line(data=wl_2013, group = 1, aes(x=factor(week), y=percent_won, color = "#e32249")) +
+  ylim(0,1) +
+  labs(x="day of the week", y="percent won", title="Winrate by day of the week 2013 vs 2019") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position="right") +
+  scale_color_discrete(name = "year", labels = c("2019", "2013"))
+```
+Similar to the results from comparing winrates by hour of the day, the winrate by day of the week for the year of 2019 is a lot better than that of 2013 for the most part with the exception of Sunday where there is a slight decline in winrate for 2019 compared to 2013. The winrate on Tuesdays seem to have stayed about the same with only a faint increase.   
+
+
+## How often are each hero played and how well did each perform?
+```{r}
+# Calculate number of times each hero are played in percentage
+hero_freq_data =count_(data, vars="hero_name")
+occurances = hero_freq_data[,2]
+total_occur = sum(occurances)
+occurances <- (occurances/total_occur)*100
+# Round to 3 decimal places
+occurances <- round(occurances, 3)
+
+performance_by_hero <- data %>%
+  dplyr::group_by(hero_name) %>%
+  # Calculate percentage won by each hero rounded to 3 decimal places
+  dplyr::summarize(total=n(), percent_won=round(mean(win==1), 3)) 
+
+performance_by_hero <- cbind(performance_by_hero,occurances)
+
+
+# Create subdata consisting of only the variables needed to calculate kda ratio and hero_name
+kda_subdata <- subset(data, select = c(kills, deaths, assists, hero_name))
+kda_subdata <- kda_subdata %>%
+  dplyr::group_by(hero_name) %>%
+  # Calculate the sum of kills, deaths and assists of each hero
+  dplyr::summarize(kills=sum(kills), deaths=sum(deaths),assists=sum(assists))
+
+# Calculate total kda of each hero
+total_kills <- kda_subdata$kills
+total_deaths <- kda_subdata$deaths
+total_assists <- kda_subdata$assists
+total_kda <- (total_kills + total_assists)/total_deaths
+# Round to 3 decimal places
+total_kda <- round(total_kda, 3)
+performance_by_hero <- cbind(performance_by_hero,total_kda)
+
+# Editing column names for better reading
+colnames(performance_by_hero)[3] <- "winrate"
+colnames(performance_by_hero)[2] <- "number of times played"
+colnames(performance_by_hero)[4] <- "times played in percentage"
+performance_by_hero <- performance_by_hero[order(performance_by_hero$`number of times played`, decreasing = TRUE),]
+performance_by_hero
+
+``` 
+
+Above is a list of all the heroes ever played, the number of times played, the value expressed as a percentage, their winrate and total kda ratio of each hero.
+For a better visulization, below are bar graph representations of the above data.   
+
+Since there are a lot of heroes played, it would be overly crowded to compare the trends of all heroes played on a graph.   
+I decided to look at the top 45 played heroes because they covered more than 80% of all the games played.  
+
+```{r}
+# Get the hero names of the top 45 most played heroes in the match history
+hero_names = hero_freq_data$hero_name[1:45]
+# Match data of only the top 30 played heroes
+top_45_data <-  subdata[subdata$hero_name %in% hero_names,]
+
+# Create column consisting of the match results
+result_col <- factor(top_45_data$match_result)
+ggplot(top_45_data, aes(factor(hero_name), fill=result_col)) + 
+  geom_bar(position=position_dodge()) +
+  labs(x = "hero", y="play count", color="match result") +
+  coord_flip(ylim = c(0,300))
+
+subdata_performance <- head(performance_by_hero, 45)
+ggplot(data = subdata_performance, aes(x=`number of times played`, y=winrate)) +
+  geom_point()
+```
+Here on the graph, each dot represents one of the top 45 heroes played with the x-axis correponding to the number of times that hero is played and the y-axis representing the overall winrate for the hero. There is a noticeable cluster grouped around a play count of 30 and winrate of 50, the form does not appear to be linear nor does it have a obvious direction. It seems that the 80% winrate on Gyrocopter is an outlier!   
+
+```{r}
+# Create subdata only containing matches played with Gyrocopter
+Gyrocopter <- data %>%
+  dplyr::filter(hero_name=="Gyrocopter") %>%
+  dplyr::group_by(year)
+
+ggplot(data=Gyrocopter, aes(x=factor(year))) +
+  geom_bar(stat="count") +
+  labs(x = "year", y= "play count", title = "Gyrocopter play count by year") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+There is a drastic increase in the play count with Gyrocopter in the years of 2018 and 2019. This along with the 80% winrate discovered previously explained why there was a linear increase in winrate from the line graph describing winrate by year earlier.   
+
+## Exploring variables contributing to winrates
+
+### Visualizing the Correlation matrix
+```{r}
+# Creating a sub-dataset for correlation matrix
+match_var_data <- subset(data, select = -c(team_col,radiant_win, match_id, hero_name, year, week, hour))
+data.cor = cor(match_var_data)
+data.cor
+cor_plot <- corrplot(data.cor)
+col <- colorRampPalette(c("blue", "white", "red"))(20)
+```
+The more blue a circle is, the more two variables are positively correlated. Similarly, the more red a circle is, the more two variables are negatively correlated.   
+    
+**Positive correlations :**
+duration : assists, kills, deaths   
+assists : duration, kills, deaths, kda, win   
+kills : duration, assists, kda, win   
+deaths : duration, assists   
+kda : assists, kills, win   
+win : assists, kills, kda   
+    
+    
+**Negative correlations :**   
+duration : kda, win   
+kills : deaths   
+deahts : kills, kda, win   
+kda : duration, deaths   
+win : duration, deaths   
+
+
+### Exploring the relationship of player K/D/A (kills/deaths/assists) and game durataion on the chance of winning 
+From the correlation matrix previously we see that the duration is positively correlated with the kills/deahts/assists variable individually, but has a negative relation with the kda ratio along with the chance of winning. On the other hand, the chance of winning has a positive correlation with the kills/assists variables and the kda ratio itself, but has a negative correlation with the number of deaths. Here I will use boxplots to look at these relations further. 
+```{r}
+# Create bin for win/lose entries
+match_result = c()
+# Convert values in vector to string, with 0 representing loses and 1 representing wins
+for (value in win_lose) {
+  if (value == 0)
+    match_result <- append(match_result, "lose")
+  else
+    match_result <- append(match_result, "win")
+}
+df2 <- data.frame(match_result=match_result)
+subdata <- cbind(data,df2)
+match_var_data <- subset(subdata, select = -c(match_id,hero_name, year))
+
+# Create boxplots comparing match result against the kills, deahts, assists and duration variables
+kills_impact <- ggplot(match_var_data, aes(x=match_result, y=kills)) +
+  geom_boxplot()
+
+deaths_impact <- ggplot(match_var_data, aes(x=match_result, y=deaths)) +
+  geom_boxplot()
+
+assists_impact <- ggplot(match_var_data, aes(x=match_result, y=assists)) +
+  geom_boxplot()
+
+duration_impact <- ggplot(match_var_data, aes(x=match_result, y=duration)) +
+  geom_boxplot()
+
+ggarrange(kills_impact, deaths_impact, assists_impact, duration_impact, ncol = 2 , nrow = 2)
+
+```
+The boxplots above compare the spread of the variables kills, deaths, assists and duration separated by the match result of either a win or a lost.    
+
+There a positive relationship between the chance of winning and the number of kills and assists. In general, I have more kills and assists when winning than losing. Based on the information so far, this suggests that the value of kills and assists could be potential estimators of whether a match will result in a win.   
+
+In addition, there is a negative relationship between the chance of winning and the number of deaths. In general, I usually have more deaths when losing than winning, with some exceptions when this is not the case, as shown in the outlier of the graph.  
+
+There does not seem to be a clear difference in game duration for winning and losing matches. However, notice that there are a significant amount of outliers beyond the lower whiskers of a losing match. Potential explainations for this might be teammates disconnecting or quitting during early stages of the match which may result in a great disadvantage for the team.   
+
+To better assess these findings I want to compare the median of the two groups. Since the data for kills, deaths and assists is not normally distributed, I will use the Mood's median test. The null hypothesis is that there is no difference in kills, deaths and assists between winning and losing games.   
+
+#### median test against kills
+```{r}
+median_test(match_var_data, kills, match_result)
+```
+The p-value is 5.605159e-48 which is a lot smaller than the Alpha 0.05, so we reject the null hypothesis and conclude that there is indeed a difference of number of kills comparing the two groups.    
+
+#### median test against deaths
+```{r}
+median_test(match_var_data, deaths, match_result)
+```
+The P-value is 6.914952e-75, similar to above it is extremely small compared to the Alpha of 0.05, so we reject the null hypothesis and conclude that there is a difference of number of deaths comparing the two groups.   
+
+#### median test against assists
+```{r}
+median_test(match_var_data, assists, match_result)
+```
+The p-value is 2.455356e-59, again, this is really small compared to the Alpha of 0.05 and so we are able to reject the null hypothesis and conclude that there is a difference in the number of assists comparing the two groups.   
+
+For the game duration variable, we can see from the plot below that is follows a straight line, so in this case the normality holds. Since the distribution is approximately normal, it is appropriate to use a pooled t-test. The null hypothesis here is that there is no difference in game duration between games won or lost.   
+
+```{r}
+ggplot(match_var_data, aes(sample=duration)) +
+  stat_qq() +
+  stat_qq_line()
+```
+#### t test against duration
+```{r}
+t.test(duration~match_result, match_var_data)
+```
+The p-value is 0.05268 which is bigger than the Alpha 0.05, so we fail to reject the null hypothesis. So, there is no evidence that there is a difference in game duration between the two groups.   
+
+### Exploring the relationship of being on the radiant team and the chance of winning
+I want to look at any possible difference between the matches being on the radiant team vs being on the dire team.   
+
+```{r}
+wl_team <- data %>%
+  dplyr::group_by(team_col) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+wl_team
+```
+From the table above it shows that being on the radiant team does have a slight increase in winrate than being on the dire team by 4.31%   
+
+
+```{r}
+# Create filtered version of only data from the year of 2013
+wl_radiant <- data %>%
+  dplyr::filter(team_col == "radiant") %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+# Create filtered version of only data from the year of 2019
+wl_dire <- data %>%
+  dplyr::filter(team_col == "dire") %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarize(total=n(), percent_won=mean(win==1))
+
+# Create line graph comparing the winrate by year for radiant vs dire
+team_wl <- ggplot() +
+  geom_line(data=wl_radiant, group = 1, aes(x=factor(year), y=percent_won, color = "#3282b8")) +
+  geom_line(data=wl_dire, group = 1, aes(x=factor(year), y=percent_won, color = "#e32249")) +
+  ylim(0,1) +
+  labs(x="team", y="percent won", title="Winrate by year: Radiant vs Dire") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position="right") +
+  scale_color_discrete(name = "team", labels = c("radiant", "dire"))
+
+team_wl
+
+```
+On the years 2012,2016 and 2017 the dire team had a higher winrate than radiant, but recall previously that there was a significantly low play count for all those years. On years where there are a lot more play counts(2013-2015, 2018-219), the radiant team had a higher winrate than dire. Because of the significant amount of data in those years, it is more reliable to believe that the radiant team has a higher winrate than dire overall. This is evidenced by the previous table which showed a 4.31% higher winrate for the radiant team.      
+
+Let's check if there are any relationships between the variables kills, deaths and assists against the two team.
+```{r}
+match_team_data <- subset(data, select = -c(match_id,hero_name, year))
+# Create boxplots comparing radiant and dire team against the kills, deahts and assists variables
+kills_impact <- ggplot(match_team_data, aes(x=team_col, y=kills)) +
+  geom_boxplot()
+
+deaths_impact <- ggplot(match_team_data, aes(x=team_col, y=deaths)) +
+  geom_boxplot()
+
+assists_impact <- ggplot(match_team_data, aes(x=team_col, y=assists)) +
+  geom_boxplot()
+
+ggarrange(kills_impact, deaths_impact, assists_impact,  ncol = 3 , nrow = 1)
+
+```
+The box plots show a slight radiant team advantage in the median numbers of kills and assists. However, there was almost no team difference in median numbers of deaths. To assess this further, I want to compare the medians of these two groups (radian and dire). But first we need to check the data for normality.   
+```{r}
+qq_kills <- ggplot(match_team_data, aes(sample=kills)) +
+  stat_qq() +
+  stat_qq_line()
+
+qq_deaths <- ggplot(match_team_data, aes(sample=deaths)) +
+  stat_qq() +
+  stat_qq_line()
+
+qq_assists <- ggplot(match_team_data, aes(sample=assists)) +
+  stat_qq() +
+  stat_qq_line()
+
+ggarrange(qq_kills, qq_deaths, qq_assists,  ncol = 3 , nrow = 1)
+```
+Since all three scatter plots have obvious curves, the data does not agree with the normality assumption, the Mood's median test would be a better fit for this case. The null hypothesis is that there is no difference between the two groups.   
+
+#### median test against kills
+```{r}
+median_test(match_team_data, kills, team_col)
+```
+The p-value is 0.3964483 and is bigger than Alpha of 0.05, which fails to reject the null hypothesis so therefore the median difference is zero and there is no evidence that the number of kills are any different amongs either teams on average.   
+
+#### median test against deaths
+```{r}
+median_test(match_team_data, deaths, team_col)
+```
+The p-value is 0.3198493. similar to above, we fail to reject the null hypothesis and so there is no difference in deaths between either teams.   
+
+#### median test against assists
+```{r}
+median_test(match_team_data, assists, team_col)
+```
+The p-value is 0.1282867, Again, we are unable to reject the null hypothesis and so there is no difference in assists between either teams.   
+
+Based on the above evidence, I conclude that there is no difference between the groups radiant and dire in terms of kills, deaths or assists. However, we previously discovered that the winrate of being on the radiant team is 4.31% than being on the dire team. Therefore, there may be other influential factors contributed to the winrate that was not recorded in the dataset used in this project.       
+
+### Findings   
+* there is no clear advantage to being on either team in terms of kills, deaths or assists.
+* the number of kills and assists generally has a positive relation with the chance of winning the game, while the number of deaths has a negative relation.   
+* the duration of the game has little impact on the chance of winning
