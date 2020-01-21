@@ -1,5 +1,8 @@
 # Exploratory-Data-Analysis-on-Dota-2-matches
 
+### R Notebook
+The R notebook version of this project can be found [here](https://leyaof.github.io/dota-analysis.nb.html)
+
 ### Introduction
 Dota 2 is a popular online multiplayer team strategy game released in 2013 by Valve. Each match consists of ten players, randomly assigned into Dire or Radiant team with five players on each team. The objective is to destroy the opposing side's base while defending our own. The purpose of this analysis is to explore the relationship between variables and examine the trends of my match history.
 
