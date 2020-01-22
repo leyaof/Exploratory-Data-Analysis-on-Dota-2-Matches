@@ -170,7 +170,7 @@ data %>%
 ```
 Overall, there are more wins than lost with a win rate of 0.5162 or 51.62%.   
 
-#### lifetime win rate trend
+#### Lifetime win rate trend
 ```{r}
 data2 <- read.csv("player_matches.csv")
 date = c()
@@ -198,19 +198,81 @@ data2 <- cbind(data2, winrate)
 ggplot(data=data2, aes(x=date, y=winrate, color="life time win rate")) +
   geom_line() +
   geom_line(aes(y=0.5, color="50% win rate"), linetype="dashed", size=0.1) +
-  labs(x="timeline", y="win rate", title="Lifetime win rate") +
+  labs(x="timeline", y="win rate", title="Lifetime Win Rate") +
   theme(plot.title = element_text(hjust = 0.5)) +
   scale_colour_manual(name="Legend",
     values=c(`life time win rate`="black", `50% win rate`="red"))
 ```
 The win rate was usually very close to 50% with intervals that were slightly above or below 50%.   
 
+#### Activity by hour of the day   
+
+```{r}
+# Create bar graph comparing the number of matches played by the hour of the day
+count_hour <- ggplot(subdata, aes(factor(hour))) +
+  geom_bar(stat="count", fill="steelblue") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  labs(x="hour of the day", y="play count", title="Play Counts by Hour of the Day") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+count_hour
+```
+The vast majority of gameplay happened between 2pm to midnight. This was expected since the period of time between the afternoons up until midnight is usually when most people are awake and active.   
+Between 2am to 9am has the lowest play counts, which makes sense since during that period of time usually most people are asleep.
+
+```{r}
+# Summarize winning matches by hour of the day
+wl_year <- data %>%
+  dplyr::group_by(hour) %>%
+  dplyr::summarise(
+    total = n(),percent_won = mean(win == 1))
+
+
+ggplot(wl_year, aes(x=factor(hour), y=percent_won)) +
+  geom_point() +
+  geom_line(group = 1) +
+  ylim(0,1) +
+  labs(x="hour of the day", y="percent won", title="Win Rate by Hour") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The win rate by the hour seems to fluctuate between 30% and 60%. An interesting note is that both the upper peaks and lower peaks occurs in the morning.   
+
+#### Activity by day of the week
+
+```{r}
+subdata$week <- factor(subdata$week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+count_week <- ggplot(subdata, aes(factor(week))) +
+  geom_bar(stat="count", fill="steelblue") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  labs(x = "day of the week", y="play count", title = "Play Count by Day of the Week") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+count_week
+```
+From the bar graph, we see that there is a steady increase in play counts throughout the weekdays. The weekends had noticeably more games played compared to the weekdays. This can be explained by the fact that there were probably a lot more work assigned on the starting day of the week from school and towards the end of the week there are more free time to spare.
+
+```{r}
+# Summarize winning matches by week
+wl_week <- data %>%
+  dplyr::group_by(week) %>%
+  dplyr::summarise(
+    total = n(),percent_won = mean(win == 1))
+
+ggplot(wl_week, aes(x=factor(week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")), y=percent_won)) +
+  geom_point() +
+  geom_line(group = 1) +
+  ylim(0,1) +
+  labs(x="week", y="win rate", title="Win Rate by Day of the Week") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Overall, there does not seem to be any major difference in win rate throughout the week. Although an interesting note is that Friday is the only day where the win rate is dropped below 50%.   
+
 ```{r}
 # Create bar graph comparing the number of matches played from 2012 to 2019
 count_year <- ggplot(subdata, aes(factor(year))) +
   geom_bar(stat="count", fill="steelblue") +
   geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
-  labs(x = "year", y="play count", title="Play count by year") +
+  labs(x = "year", y="play count", title="Play Count by Year") +
   theme(plot.title = element_text(hjust = 0.5))
   
 # create column consisting of the match results
@@ -233,72 +295,10 @@ ggplot(wl_year, aes(x=factor(year), y=percent_won)) +
   geom_point() +
   geom_line(group = 1) +
   ylim(0,1) +
-  labs(x="year", y="win rate", title="win rate by year") +
+  labs(x="year", y="win rate", title="Win Rate by Year") +
   theme(plot.title = element_text(hjust = 0.5))
 ```
-The years 2012, 2016 and 2017 has considerably lower win rate on the graph compare to other years. This might be the result of lack of data or simply decline in game mechanics for not playing frequently. The linear increase in win rate between 2017-2019 will be discussed later on.   
-
-#### Activity by hour of the day   
-
-```{r}
-# Create bar graph comparing the number of matches played by the hour of the day
-count_hour <- ggplot(subdata, aes(factor(hour))) +
-  geom_bar(stat="count", fill="steelblue") +
-  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
-  labs(x="hour of the day", y="play count", title="play counts by hour of the day") +
-  theme(plot.title = element_text(hjust = 0.5))
-
-count_hour
-```
-The vast majority of gameplay happened between 2pm to midnight. This was expected since the period of time between the afternoons up until midnight is usually when most people are awake and active.   
-Between 2am to 9am has the lowest play counts, which makes sense since during that period of time usually most people are asleep.
-
-```{r}
-# Summarize winning matches by hour of the day
-wl_year <- data %>%
-  dplyr::group_by(hour) %>%
-  dplyr::summarise(
-    total = n(),percent_won = mean(win == 1))
-
-
-ggplot(wl_year, aes(x=factor(hour), y=percent_won)) +
-  geom_point() +
-  geom_line(group = 1) +
-  ylim(0,1) +
-  labs(x="hour of the day", y="percent won", title="win rate by hour") +
-  theme(plot.title = element_text(hjust = 0.5))
-```
-The win rate by the hour seems to fluctuate between 30% and 60%. An interesting note is that both the upper peaks and lower peaks occurs in the morning.   
-
-#### Activity by day of the week
-
-```{r}
-subdata$week <- factor(subdata$week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
-count_week <- ggplot(subdata, aes(factor(week))) +
-  geom_bar(stat="count", fill="steelblue") +
-  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
-  labs(x = "day of the week", y="play count", title = "play count by day of the week") +
-  theme(plot.title = element_text(hjust = 0.5))
-
-count_week
-```
-From the bar graph, we see that there is a steady increase in play counts throughout the weekdays. The weekends had noticeably more games played compared to the weekdays. This can be explained by the fact that there were probably a lot more work assigned on the starting day of the week from school and towards the end of the week there are more free time to spare.
-
-```{r}
-# Summarize winning matches by week
-wl_week <- data %>%
-  dplyr::group_by(week) %>%
-  dplyr::summarise(
-    total = n(),percent_won = mean(win == 1))
-
-ggplot(wl_week, aes(x=factor(week, levels= c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")), y=percent_won)) +
-  geom_point() +
-  geom_line(group = 1) +
-  ylim(0,1) +
-  labs(x="week", y="win rate", title="win rate by day of the week") +
-  theme(plot.title = element_text(hjust = 0.5))
-```
-Overall, there does not seem to be any major difference in win rate throughout the week. Although an interesting note is that Friday is the only day where the win rate is dropped below 50%.   
+The years 2012, 2016 and 2017 has considerably lower win rate on the graph compare to other years. This might be the result of lack of data or simply decline in game mechanics for not playing frequently. The linear increase in win rate between 2017-2019 will be discussed later on.  
 
 In general, there seems to be an improvement in win rate throughout the years, with the highest win rate being in the year of 2019. For further investigation, I will look at the win rate difference between when Jeff first started playing compared to the most recent matches in terms of hours and days of the week. Since the matches of 2012 happened during the last few days of the year, there are very few number of games played during the year of 2012, so I decided to compare the data between 2013 and 2019.
 ```{r}
@@ -327,7 +327,7 @@ ggplot() +
   geom_line(data=wl_2013_2, group = 1, aes(x=factor(hour), y=percent_won, color = "#e32249")) +
   geom_line(data=wl_2013_7, group = 1, aes(x=factor(hour), y=percent_won, color = "#e32249")) +
   ylim(0,1) +
-  labs(x="hour of the day", y="percent won", title="win rate by hour of the day 2013 vs 2019") +
+  labs(x="hour of the day", y="percent won", title="Win Rate by Hour of the Day 2013 vs 2019") +
   theme(plot.title = element_text(hjust = 0.5)) +
   theme(legend.position="right")+
   scale_color_discrete(name = "year", labels = c("2019", "2013"))
@@ -355,7 +355,7 @@ ggplot() +
   geom_line(data=wl_2019, group = 1, aes(x=factor(week), y=percent_won, color = "#3282b8")) +
   geom_line(data=wl_2013, group = 1, aes(x=factor(week), y=percent_won, color = "#e32249")) +
   ylim(0,1) +
-  labs(x="day of the week", y="percent won", title="win rate by day of the week 2013 vs 2019") +
+  labs(x="day of the week", y="percent won", title="Win Rate by Day of the Week 2013 vs 2019") +
   theme(plot.title = element_text(hjust = 0.5)) +
   theme(legend.position="right") +
   scale_color_discrete(name = "year", labels = c("2019", "2013"))
@@ -364,7 +364,7 @@ Similar to the results from comparing win rates by hour of the day, the win rate
 
 
 ## How often are each hero played and how well did each perform?
-Previously, we looked at the distribution of play counts across different time variables along with their win rates, in this section I will explore which heroes Jeff dedicated most of his time into.  
+Previously, we looked at the distribution of play counts across different time variables along with their win rates, in this section I will explore which heroes Jeff dedicated most of his time to.  
 ```{r}
 # Calculate number of times each hero are played in percentage
 hero_freq_data =count_(data, vars="hero_name")
@@ -423,14 +423,14 @@ top_45_data <-  subdata[subdata$hero_name %in% hero_names,]
 result_col <- factor(top_45_data$match_result)
 ggplot(top_45_data, aes(factor(hero_name), fill=result_col)) + 
   geom_bar(position=position_dodge()) +
-  labs(x = "hero", y="play count", color="match result", title = "hero play count") +
+  labs(x = "hero", y="play count", color="match result", title = "Hero Play Count") +
   theme(plot.title = element_text(hjust = 0.5)) +
   coord_flip(ylim = c(0,300))
 
 subdata_performance <- head(performance_by_hero, 45)
 ggplot(data = subdata_performance, aes(x=`number of times played`, y=winrate)) +
   geom_point() +
-  labs(title = "number of times played vs win rate") +
+  labs(title = "Number of Times Played vs Win Rate") +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 Here on the graph, each dot represents one of the top 45 heroes played with the x-axis correponding to the number of times that hero is played and the y-axis representing the overall win rate for the hero. There is a noticeable cluster grouped around a play count of 30 and win rate of 50, the form does not appear to be linear nor does it have a obvious Direction. It seems that the 80% win rate on Gyrocopter is an outlier!   
@@ -443,11 +443,11 @@ Gyrocopter <- data %>%
 
 ggplot(data=Gyrocopter, aes(x=factor(year))) +
   geom_bar(stat="count") +
-  labs(x = "year", y= "play count", title = "Gyrocopter play count by year") +
+  labs(x = "year", y= "play count", title = "Gyrocopter Play Count by Year") +
   theme(plot.title = element_text(hjust = 0.5))
   
 ```
-There is a drastic increase in the play count with Gyrocopter in the years of 2018 and 2019. This along with the 80% win rate discovered previously explained why there was a linear increase in win rate from the line graph describing win rate by year earlier.   
+There is a drastic increase in the play count with Gyrocopter in the years of 2018 and 2019. This trend and the 80% win rate discovered explains why there was a linear increase in win rate from the line graph describing win rate by year earlier.   
 
 ## Exploring variables contributing to win rates
 
@@ -519,21 +519,21 @@ In addition, there is a negative relationship between the chance of winning and 
 
 There does not seem to be a clear difference in game duration for winning and losing matches. However, notice that there are a significant amount of outliers beyond the lower whiskers of a losing match. Potential explanations for this might be teammates disconnecting or quitting during early stages of the match which may result in a great disadvantage for the team.   
 
-To better assess these findings I want to compare the median of the two groups. Since the data for kills, deaths and assists is not normally distributed, I will use the Mood's median test. The null hypothesis is that there is no difference in kills, deaths and assists between winning and losing games.   
+I want to compare the median of the two groups to better assess these findings. Since the data for kills, deaths and assists is not normally distributed, I will use the Mood's median test. The null hypothesis is that there is no difference in kills, deaths and assists between winning and losing games.   
 
-#### median test against kills
+#### Median test against kills
 ```{r}
 median_test(match_var_data, kills, match_result)
 ```
 The p-value is 5.605159e-48 which is a lot smaller than the Alpha 0.05, so we reject the null hypothesis and conclude that there is indeed a difference of number of kills comparing the two groups.    
 
-#### median test against deaths
+#### Median test against deaths
 ```{r}
 median_test(match_var_data, deaths, match_result)
 ```
 The P-value is 6.914952e-75, similar to above it is extremely small compared to the Alpha of 0.05, so we reject the null hypothesis and conclude that there is a difference of number of deaths comparing the two groups.   
 
-#### median test against assists
+#### Median test against assists
 ```{r}
 median_test(match_var_data, assists, match_result)
 ```
@@ -548,7 +548,7 @@ ggplot(match_var_data, aes(sample=duration)) +
   labs(title="QQ plot : duration") +
   theme(plot.title = element_text(hjust = 0.5))
 ```
-#### t test against duration
+#### T test against duration
 ```{r}
 t.test(duration~match_result, match_var_data, var.equal=T)
 ```
@@ -585,7 +585,7 @@ team_wl <- ggplot() +
   geom_line(data=wl_Radiant, group = 1, aes(x=factor(year), y=percent_won, color = "#3282b8")) +
   geom_line(data=wl_Dire, group = 1, aes(x=factor(year), y=percent_won, color = "#e32249")) +
   ylim(0,1) +
-  labs(x="team", y="percent won", title="win rate by year: Radiant vs Dire") +
+  labs(x="year", y="percent won", title="Win Rate by Year: Radiant vs Dire") +
   theme(plot.title = element_text(hjust = 0.5)) +
   theme(legend.position="right") +
   scale_color_discrete(name = "team", labels = c("Radiant", "Dire"))
@@ -633,30 +633,30 @@ qq_assists <- ggplot(match_team_data, aes(sample=assists)) +
 
 ggarrange(qq_kills, qq_deaths, qq_assists,  ncol = 3 , nrow = 1)
 ```
-Since all three QQ plots have obvious curves, the data does not agree with the normality assumption, the Mood's median test would be a better fit for this case. The null hypothesis is that there is no difference between the two groups.   
+Since all three QQ plots have obvious curves, it implies that the data does not agree with the normality assumption. Therefore, the Mood's median test would be a better fit for this case. The null hypothesis is that there is no difference between the two groups.   
 
-#### median test against kills
+#### Median test against kills
 ```{r}
 median_test(match_team_data, kills, team_col)
 ```
 The p-value is 0.3964483 and is bigger than Alpha of 0.05, which fails to reject the null hypothesis so therefore the median difference is zero and there is no evidence that the number of kills are any different amongst either teams on average.   
 
-#### median test against deaths
+#### Median test against deaths
 ```{r}
 median_test(match_team_data, deaths, team_col)
 ```
 The p-value is 0.3198493. Similar to above, we fail to reject the null hypothesis that there is no difference in deaths between either teams.   
 
-#### median test against assists
+#### Median test against assists
 ```{r}
 median_test(match_team_data, assists, team_col)
 ```
 The p-value is 0.1282867, again, we are unable to reject the null hypothesis that there is no difference in assists between either teams.   
 
-Based on the above evidence, I conclude that there is no difference between the groups Radiant and Dire in terms of kills, deaths or assists. However, we previously discovered that the win rate of being on the Radiant team is 4.31% than being on the Dire team. Therefore, there may be other influential factors contributed to the win rate that was not recorded in the dataset used in this project.       
+Based on the above evidence, I conclude that there is no difference between the groups Radiant and Dire in terms of kills, deaths or assists. However, we previously discovered that the win rate of being on the Radiant team is 4.31% than being on the Dire team. Therefore, there may be other unaccounted factors contributed to the win rate that was not recorded in the dataset used in this project.       
 
 ## Findings   
 * There is no clear advantage to being on either team in terms of kills, deaths or assists.
 * The number of kills and assists generally has a positive relation with the chance of winning the game, while the number of deaths has a negative relation.   
 * The duration of the game has little impact on the chance of winning
-* The lifetime win rate is attempted to be balanced at 50%
+* The lifetime win rate fluctuates around 50%
