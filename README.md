@@ -1,4 +1,4 @@
-# Exploratory-Data-Analysis-on-Dota-2-matches
+# Exploratory-Data-Analysis-on-Dota-2-Matches
 
 ### R Notebook
 The R notebook version of this project can be found [here](https://leyaof.github.io/Notebooks/dota%20analysis.nb.html)
